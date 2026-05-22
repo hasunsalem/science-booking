@@ -69,6 +69,16 @@ def is_conflict(asset_id, start, end):
     res = pd.read_sql_query(query, db_conn, params=(asset_id, str(end), str(start)))
     return not res.empty
 
+# ฟังก์ชันสำหรับระบายสีแถวตามสถานะ
+def style_status(row):
+    status = row['approval_status']
+    if status == 'อนุมัติแล้ว':
+        return ['background-color: #d4edda; color: #155724'] * len(row)
+    elif status == 'ไม่นุมัติ':
+        return ['background-color: #f8d7da; color: #721c24'] * len(row)
+    else:
+        return ['background-color: #fff3cd; color: #856404'] * len(row)
+
 # --- 3. APP LAYOUT ---
 st.markdown("<h1 style='text-align: center; color: #0f172a;'>ระบบขอใช้เครื่องมือวิทยาศาสตร์</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #475569; margin-bottom: 40px;'>หลักสูตร วท.บ. สาขาวิชาเคมี</p>", unsafe_allow_html=True)
@@ -76,7 +86,6 @@ st.markdown("<p style='text-align: center; color: #475569; margin-bottom: 40px;'
 tab1, tab2 = st.tabs(["✍️ ลงทะเบียนจอง", "🔍 ตรวจสอบสถานะ"])
 
 with tab1:
-    # --- ส่วนที่ 1: รายละเอียดผู้ขอใช้บริการ ---
     st.markdown('<div class="section-1-container"><div class="header-1">👤 ส่วนที่ 1: รายละเอียดผู้ขอใช้บริการ</div><div class="body-1">', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     with c1:
@@ -89,13 +98,10 @@ with tab1:
         purpose = st.text_input("วัตถุประสงค์การใช้งาน")
     st.markdown('</div></div>', unsafe_allow_html=True)
 
-    # --- ส่วนที่ 2: รายละเอียดเครื่องมือ ---
     st.markdown('<div class="section-2-container"><div class="header-2">🔬 ส่วนที่ 2: รายละเอียดเครื่องมือ และปฏิทินวันว่าง</div><div class="body-2">', unsafe_allow_html=True)
     col_tool, col_id = st.columns([2, 1])
-    with col_tool:
-        tool_name = st.text_input("ชื่อเครื่องมือวิทยาศาสตร์")
-    with col_id:
-        asset_id = st.text_input("รหัสครุภัณฑ์", placeholder="เช่น CHEM-001")
+    with col_tool: tool_name = st.text_input("ชื่อเครื่องมือวิทยาศาสตร์")
+    with col_id: asset_id = st.text_input("รหัสครุภัณฑ์", placeholder="เช่น CHEM-001")
     
     if asset_id:
         busy_list = get_busy_dates(asset_id)
@@ -106,17 +112,15 @@ with tab1:
 
     st.divider()
     col_d1, col_d2 = st.columns(2)
-    with col_d1:
-        start_date = st.date_input("วันที่เริ่มใช้งาน", min_value=datetime.today())
-    with col_d2:
-        end_date = st.date_input("วันที่ส่งคืน", min_value=start_date)
+    with col_d1: start_date = st.date_input("วันที่เริ่มใช้งาน", min_value=datetime.today())
+    with col_d2: end_date = st.date_input("วันที่ส่งคืน", min_value=start_date)
     st.markdown('</div></div>', unsafe_allow_html=True)
 
     if st.button("🚀 ยืนยันคำขอจอง", use_container_width=True, type="primary"):
         if not name or not asset_id:
             st.error("⚠️ กรุณากรอกข้อมูลให้ครบถ้วน")
         elif is_conflict(asset_id, start_date, end_date):
-            st.error("❌ ช่วงวันที่เลือกมีการจองอยู่แล้ว โปรดเลือกช่วงเวลาอื่น")
+            st.error("❌ ช่วงวันที่เลือกมีการจองอยู่แล้ว")
         else:
             cur = db_conn.cursor()
             cur.execute("INSERT INTO bookings (name, status, phone, faculty, supervisor, start_date, end_date, tool_name, asset_id) VALUES (?,?,?,?,?,?,?,?,?)", 
@@ -131,8 +135,9 @@ with tab2:
     df = pd.read_sql_query("SELECT * FROM bookings ORDER BY id DESC", db_conn)
     
     if not df.empty:
-        # แก้ไข Error: เปลี่ยนจากการใช้ BadgeColumn เป็นตารางปกติที่รองรับทุกเวอร์ชัน
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        # ใช้ Pandas Styling เพื่อระบายสีทั้งแถวตามสถานะ
+        styled_df = df.style.apply(style_status, axis=1)
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
         
         if is_admin:
             st.divider()
@@ -143,7 +148,7 @@ with tab2:
                 db_conn.cursor().execute("UPDATE bookings SET approval_status = 'อนุมัติแล้ว' WHERE id = ?", (target_id,))
                 db_conn.commit()
                 st.rerun()
-            if b2.button("❌ ไม่นุมัติ"):
+            if b2.button("❌ ไม่อนุมัติ"):
                 db_conn.cursor().execute("UPDATE bookings SET approval_status = 'ไม่นุมัติ' WHERE id = ?", (target_id,))
                 db_conn.commit()
                 st.rerun()
