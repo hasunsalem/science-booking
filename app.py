@@ -1,143 +1,131 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
+import sqlite3
 import pandas as pd
 from datetime import datetime
 
-# --- การตั้งค่าหน้าจอและธีม ---
+# --- 1. ตั้งค่าหน้าจอและดีไซน์ ---
 st.set_page_config(page_title="Science Booking System", layout="wide")
 
-# --- CUSTOM CSS (สำหรับดีไซน์และลายน้ำโมเลกุล) ---
+# Custom CSS สำหรับความสวยงามและลายน้ำโมเลกุล
 st.markdown("""
 <style>
-    /* พื้นหลังและลายน้ำโมเลกุล */
-    .main {
-        background-color: #f8f9fa;
-        background-image: 
-            url('https://www.transparenttextures.com/patterns/carbon-fibre.png');
-    }
+    .main { background-color: #f0f2f6; }
     
-    /* สร้างลายน้ำโมเลกุลลอยไปมา */
-    .watermark {
-        position: fixed;
-        top: 0; left: 0; width: 100%; height: 100%;
-        z-index: -1;
-        opacity: 0.05;
-        pointer-events: none;
-        overflow: hidden;
+    /* ลายน้ำโมเลกุลลอยไปมา */
+    .watermark-container {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        z-index: -1; pointer-events: none; overflow: hidden; opacity: 0.06;
     }
-    
     .molecule {
-        position: absolute;
-        font-family: 'Courier New', Courier, monospace;
-        font-weight: bold;
-        color: #2c3e50;
-        animation: float 20s infinite linear;
+        position: absolute; font-family: sans-serif; font-weight: bold;
+        animation: float 25s infinite alternate ease-in-out;
     }
-
     @keyframes float {
-        0% { transform: translate(0, 0) rotate(0deg); opacity: 0.2; }
-        50% { transform: translate(100px, 100px) rotate(180deg); opacity: 0.5; }
-        100% { transform: translate(0, 0) rotate(360deg); opacity: 0.2; }
+        0% { transform: translate(0, 0) rotate(0deg); }
+        100% { transform: translate(80px, 50px) rotate(360deg); }
     }
-
-    /* ตกแต่ง Card */
+    
+    /* ตกแต่ง Card ให้มีมิติ */
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    .stTabs [data-baseweb="tab"] {
+        background-color: #ffffff; border-radius: 10px 10px 0 0;
+        padding: 10px 20px; box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+    }
     .stForm {
-        background: white;
-        padding: 2rem;
-        border-radius: 15px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        background: white; padding: 30px; border-radius: 15px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
     }
 </style>
 
-<div class="watermark">
-    <div class="molecule" style="top:10%; left:10%; font-size:40px;">H₂O</div>
-    <div class="molecule" style="top:40%; left:80%; font-size:60px;">C₆H₁₂O₆</div>
-    <div class="molecule" style="top:70%; left:20%; font-size:50px;">NaCl</div>
-    <div class="molecule" style="top:20%; left:60%; font-size:30px;">CH₄</div>
-    <div class="molecule" style="top:85%; left:75%; font-size:45px;">CO₂</div>
+<div class="watermark-container">
+    <div class="molecule" style="top:10%; left:5%; font-size:50px; animation-delay: 0s;">H₂O</div>
+    <div class="molecule" style="top:30%; left:85%; font-size:70px; animation-delay: -5s;">C₆H₁₂O₆</div>
+    <div class="molecule" style="top:60%; left:15%; font-size:40px; animation-delay: -10s;">NaCl</div>
+    <div class="molecule" style="top:80%; left:70%; font-size:60px; animation-delay: -15s;">NH₃</div>
 </div>
 """, unsafe_allow_html=True)
 
-# --- ส่วนฐานข้อมูล (Google Sheets) ---
-conn = st.connection("gsheets", type=GSheetsConnection)
-df = conn.read(worksheet="Sheet1", ttl=0)
+# --- 2. ระบบฐานข้อมูล SQLite (จัดการในตัวแอป) ---
+def init_db():
+    conn = sqlite3.connect('local_booking.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS bookings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT, status TEXT, phone TEXT, faculty TEXT, 
+        purpose TEXT, start_date DATE, end_date DATE, 
+        tool_name TEXT, asset_id TEXT, state TEXT DEFAULT 'Active'
+    )''')
+    conn.commit()
+    return conn
 
-# --- ฟังก์ชันเช็คการจอง ---
-def check_overlap(df, asset_id, start_date, end_date):
-    if df.empty: return None
-    df['start_date'] = pd.to_datetime(df['start_date']).dt.date
-    df['end_date'] = pd.to_datetime(df['end_date']).dt.date
-    mask = (df['asset_id'] == asset_id) & (df['status'] != 'Cancelled') & \
-           (pd.to_datetime(start_date).date() <= df['end_date']) & \
-           (pd.to_datetime(end_date).date() >= df['start_date'])
-    overlap = df[mask]
-    return overlap.iloc[0] if not overlap.empty else None
+def check_overlap(asset_id, start, end):
+    conn = sqlite3.connect('local_booking.db')
+    query = """SELECT name FROM bookings 
+               WHERE asset_id = ? AND state = 'Active' 
+               AND (? <= end_date AND ? >= start_date)"""
+    df = pd.read_sql_query(query, conn, params=(asset_id, str(end), str(start)))
+    conn.close()
+    return df
 
-# --- การแบ่งหน้า (Navigation) ---
-tabs = st.tabs(["📝 แบบฟอร์มจองเครื่องมือ", "🔍 ตรวจสอบและประวัติการจอง"])
+# --- 3. ส่วนประกอบหน้าเว็บ (UI) ---
+tabs = st.tabs(["📝 แบบฟอร์มจองใหม่", "📊 ประวัติการจองทั้งหมด"])
 
-# --- หน้าที่ 1: แบบฟอร์มจอง ---
 with tabs[0]:
-    st.title("🧪 จองเครื่องมือวิทยาศาสตร์")
-    st.caption("กรุณากรอกข้อมูลให้ครบถ้วนเพื่อทำการจองในระบบ")
+    st.title("🧪 ระบบจองเครื่องมือวิทยาศาสตร์")
+    st.write("บันทึกข้อมูลการจองเครื่องมือในระบบฐานข้อมูลส่วนตัว")
     
-    with st.form("modern_booking_form"):
-        st.subheader("👤 ข้อมูลผู้จอง")
+    with st.form("booking_form"):
         col1, col2 = st.columns(2)
         with col1:
-            name = st.text_input("ชื่อ - นามสกุล", placeholder="ระบุชื่อจริง-นามสกุล")
-            u_status = st.selectbox("สถานะผู้ใช้งาน", ["อาจารย์", "เจ้าหน้าที่", "นักศึกษา"])
+            name = st.text_input("ชื่อ - นามสกุล", placeholder="สมชาย ใจดี")
+            u_status = st.selectbox("สถานะ", ["อาจารย์", "เจ้าหน้าที่", "นักศึกษา"])
+            phone = st.text_input("เบอร์โทรศัพท์")
         with col2:
-            phone = st.text_input("เบอร์โทรศัพท์ที่ติดต่อได้")
             faculty = st.text_input("สังกัด / คณะ")
-            
-        st.subheader("⚙️ รายละเอียดการใช้งาน")
-        purpose = st.radio("วัตถุประสงค์", ["งานวิจัย", "การเรียนการสอน", "อื่นๆ"], horizontal=True)
+            purpose = st.selectbox("วัตถุประสงค์", ["งานวิจัย", "การเรียนการสอน", "อื่นๆ"])
         
+        st.divider()
         col3, col4 = st.columns(2)
         with col3:
-            start_date = st.date_input("วันที่เริ่มใช้", min_value=datetime.today())
+            tool_name = st.text_input("ชื่อเครื่องมือวิทยาศาสตร์")
+            asset_id = st.text_input("รหัสครุภัณฑ์")
         with col4:
-            end_date = st.date_input("วันที่ส่งคืน", min_value=start_date)
-
-        st.subheader("🔬 รายละเอียดเครื่องมือ")
-        tool_name = st.text_input("ชื่อเครื่องมือวิทยาศาสตร์")
-        asset_id = st.text_input("รหัสครุภัณฑ์ (Asset ID)")
-
-        if st.form_submit_button("ส่งข้อมูลการจอง"):
+            start_date = st.date_input("เริ่มวันที่", min_value=datetime.today())
+            end_date = st.date_input("ถึงวันที่", min_value=start_date)
+            
+        if st.form_submit_button("ยืนยันการจองเครื่องมือ", type="primary"):
             if not name or not asset_id:
-                st.warning("⚠️ กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน")
+                st.error("กรุณากรอกข้อมูลสำคัญให้ครบถ้วน")
             else:
-                overlap = check_overlap(df, asset_id, start_date, end_date)
-                if overlap is not None:
-                    st.error(f"🚫 เครื่องมือรหัส {asset_id} ถูกจองแล้วในช่วงเวลานี้")
+                overlap_check = check_overlap(asset_id, start_date, end_date)
+                if not overlap_check.empty:
+                    st.error(f"❌ เครื่องมือนี้ถูกจองแล้วโดยคุณ {overlap_check.iloc[0]['name']}")
                 else:
-                    new_entry = pd.DataFrame([{
-                        "name": name, "user_status": u_status, "phone": phone, 
-                        "faculty": faculty, "purpose": purpose, 
-                        "start_date": str(start_date), "end_date": str(end_date),
-                        "tool_name": tool_name, "asset_id": asset_id, "status": "Active"
-                    }])
-                    updated_df = pd.concat([df, new_entry], ignore_index=True)
-                    conn.update(worksheet="Sheet1", data=updated_df)
-                    st.success("🎉 บันทึกการจองสำเร็จ! คุณสามารถตรวจสอบสถานะได้ในหน้าถัดไป")
+                    conn = sqlite3.connect('local_booking.db')
+                    c = conn.cursor()
+                    c.execute('''INSERT INTO bookings 
+                        (name, status, phone, faculty, purpose, start_date, end_date, tool_name, asset_id)
+                        VALUES (?,?,?,?,?,?,?,?,?)''', 
+                        (name, u_status, phone, faculty, purpose, str(start_date), str(end_date), tool_name, asset_id))
+                    conn.commit()
+                    conn.close()
+                    st.success("✅ บันทึกข้อมูลสำเร็จ!")
                     st.balloons()
 
-# --- หน้าที่ 2: ประวัติการจอง ---
 with tabs[1]:
-    st.title("📊 ประวัติและสถานะการจอง")
-    st.write("รายการจองทั้งหมดที่บันทึกอยู่ในระบบปัจจุบัน")
+    st.title("📂 ตรวจสอบข้อมูลการจอง")
+    conn = sqlite3.connect('local_booking.db')
+    all_data = pd.read_sql_query("SELECT * FROM bookings ORDER BY id DESC", conn)
+    conn.close()
     
-    # ช่องค้นหา (Search)
-    search_query = st.text_input("🔍 ค้นหาด้วยชื่อผู้จอง หรือ รหัสครุภัณฑ์")
-    
-    display_df = df.copy()
-    if search_query:
-        display_df = display_df[display_df['name'].str.contains(search_query) | 
-                                display_df['asset_id'].str.contains(search_query)]
-    
-    # จัดการการแสดงผลตารางให้สวยงาม
-    if not display_df.empty:
-        st.dataframe(display_df, use_container_width=True)
+    if not all_data.empty:
+        # ระบบค้นหาแบบง่าย
+        search = st.text_input("🔍 ค้นหาชื่อผู้จอง หรือ รหัสครุภัณฑ์")
+        if search:
+            all_data = all_data[all_data['name'].str.contains(search) | all_data['asset_id'].str.contains(search)]
+        
+        st.dataframe(all_data, use_container_width=True)
     else:
-        st.info("ยังไม่มีข้อมูลการจองในขณะนี้")
+        st.info("ยังไม่มีข้อมูลการจองในฐานข้อมูล")
+
+# เริ่มต้นสร้าง DB ถ้ายังไม่มี
