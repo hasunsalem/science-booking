@@ -76,7 +76,7 @@ st.markdown("<p style='text-align: center; color: #475569; margin-bottom: 40px;'
 tab1, tab2 = st.tabs(["✍️ ลงทะเบียนจอง", "🔍 ตรวจสอบสถานะ"])
 
 with tab1:
-    # --- ส่วนที่ 1: ข้อมูลผู้ขอใช้บริการ ---
+    # --- ส่วนที่ 1: รายละเอียดผู้ขอใช้บริการ ---
     st.markdown('<div class="section-1-container"><div class="header-1">👤 ส่วนที่ 1: รายละเอียดผู้ขอใช้บริการ</div><div class="body-1">', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     with c1:
@@ -91,23 +91,20 @@ with tab1:
 
     # --- ส่วนที่ 2: รายละเอียดเครื่องมือ ---
     st.markdown('<div class="section-2-container"><div class="header-2">🔬 ส่วนที่ 2: รายละเอียดเครื่องมือ และปฏิทินวันว่าง</div><div class="body-2">', unsafe_allow_html=True)
-    
     col_tool, col_id = st.columns([2, 1])
     with col_tool:
         tool_name = st.text_input("ชื่อเครื่องมือวิทยาศาสตร์")
     with col_id:
         asset_id = st.text_input("รหัสครุภัณฑ์", placeholder="เช่น CHEM-001")
     
-    # แสดงวันที่ไม่ว่างทันทีเมื่อกรอกรหัสครุภัณฑ์
     if asset_id:
         busy_list = get_busy_dates(asset_id)
         if busy_list:
-            st.markdown('<div class="busy-box"><b>⚠️ วันที่เครื่องมือนี้ไม่ว่าง (จองไม่ได้):</b><br>' + '<br>'.join(busy_list) + '</div>', unsafe_allow_html=True)
+            st.markdown('<div class="busy-box"><b>⚠️ วันที่เครื่องมือนี้ไม่ว่าง:</b><br>' + '<br>'.join(busy_list) + '</div>', unsafe_allow_html=True)
         else:
             st.success("✅ เครื่องมือว่างทุกช่วงเวลา")
 
     st.divider()
-    
     col_d1, col_d2 = st.columns(2)
     with col_d1:
         start_date = st.date_input("วันที่เริ่มใช้งาน", min_value=datetime.today())
@@ -125,21 +122,17 @@ with tab1:
             cur.execute("INSERT INTO bookings (name, status, phone, faculty, supervisor, start_date, end_date, tool_name, asset_id) VALUES (?,?,?,?,?,?,?,?,?)", 
                         (name, u_status, phone, faculty, supervisor, str(start_date), str(end_date), tool_name, asset_id))
             db_conn.commit()
-            st.success("🎉 บันทึกคำขอสำเร็จ! กรุณารอเจ้าหน้าที่ตรวจสอบสถานะ")
+            st.success("🎉 บันทึกคำขอสำเร็จ!")
             st.balloons()
 
 with tab2:
     st.markdown("### 📊 รายการตรวจสอบสถานะการจอง")
-    
-    # ระบบเจ้าหน้าที่
     is_admin = st.sidebar.checkbox("โหมดเจ้าหน้าที่ (Admin)")
     df = pd.read_sql_query("SELECT * FROM bookings ORDER BY id DESC", db_conn)
     
     if not df.empty:
-        st.dataframe(df, use_container_width=True, hide_index=True, column_config={
-            "approval_status": st.column_config.BadgeColumn("สถานะ", 
-                map={"รออนุมัติ": "🟡 รออนุมัติ", "อนุมัติแล้ว": "🟢 อนุมัติแล้ว", "ไม่นุมัติ": "🔴 ไม่นุมัติ"})
-        })
+        # แก้ไข Error: เปลี่ยนจากการใช้ BadgeColumn เป็นตารางปกติที่รองรับทุกเวอร์ชัน
+        st.dataframe(df, use_container_width=True, hide_index=True)
         
         if is_admin:
             st.divider()
