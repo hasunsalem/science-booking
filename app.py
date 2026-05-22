@@ -112,7 +112,7 @@ with tab1:
         u_status = st.selectbox("สถานะ", ["นักศึกษา", "อาจารย์", "เจ้าหน้าที่"])
         phone = st.text_input("เบอร์โทรศัพท์")
     with c2:
-        faculty = st.text_input("คณะ/สาขาวิชา", value="กรอก")
+        faculty = st.text_input("คณะ/สาขาวิชา")
         supervisor = st.text_input("อาจารย์ผู้ควบคุม")
         purpose = st.text_input("วัตถุประสงค์")
     st.markdown('</div></div>', unsafe_allow_html=True)
