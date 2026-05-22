@@ -8,8 +8,8 @@ st.set_page_config(page_title="Chem Booking - วท.บ.เคมี", layout="
 
 st.markdown("""
 <style>
-    /* พื้นหลังหลักแบบสะอาดตา */
-    .stApp { background-color: #fefdfb !important; }
+    /* พื้นหลังหลัก */
+    .stApp { background-color: #fcfdfe !important; }
     
     /* ลายน้ำโมเลกุล Dynamic */
     .molecule-bg {
@@ -25,12 +25,12 @@ st.markdown("""
         100% { transform: translate(100px, 50px) rotate(360deg); }
     }
 
-    /* กล่องหน้าปก 3 มิติ สีเหลืองอ่อน (Soft Yellow Glassmorphism) */
+    /* กล่องหน้าปก 3 มิติ สีเหลืองอ่อน */
     .glass-header {
-        background: rgba(255, 251, 235, 0.8); /* สีเหลืองอ่อนโปร่งแสง */
+        background: rgba(255, 251, 235, 0.85); 
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
-        border: 2px solid rgba(251, 191, 36, 0.3); /* ขอบสีทองอ่อน */
+        border: 2px solid rgba(251, 191, 36, 0.4);
         border-radius: 30px;
         padding: 45px;
         text-align: center;
@@ -39,7 +39,6 @@ st.markdown("""
         transform: perspective(1000px) rotateX(1deg);
     }
     
-    /* ข้อความเคลื่อนไหว (Animated Title) */
     .animated-title {
         font-size: 2.8rem;
         font-weight: 800;
@@ -58,7 +57,7 @@ st.markdown("""
         50% { transform: translateY(-8px); }
     }
 
-    /* กล่องข้อมูลส่วนที่ 1 และ 2 (Integrated Yellow Theme) */
+    /* กล่องข้อมูลส่วนที่ 1 และ 2 */
     .section-1-container { border-radius: 22px; overflow: hidden; margin-bottom: 25px; box-shadow: 0 10px 25px rgba(180, 83, 9, 0.08); border: 1px solid #fde68a; }
     .header-1 { background: #d97706; color: white; padding: 18px 25px; font-weight: bold; font-size: 1.15rem; }
     .body-1 { background: #fffbeb; padding: 28px; }
@@ -93,7 +92,6 @@ def init_db():
 db_conn = init_db()
 
 # --- 3. APP INTERFACE ---
-# หน้าปกสีเหลืองอ่อน 3 มิติ
 st.markdown("""
 <div class="glass-header">
     <div class="animated-title">ระบบขอใช้เครื่องมือวิทยาศาสตร์</div>
@@ -106,7 +104,7 @@ st.markdown("""
 tab1, tab2 = st.tabs(["✍️ ลงทะเบียนจอง", "🔍 ตรวจสอบสถานะ"])
 
 with tab1:
-    # --- ส่วนที่ 1: ข้อมูลผู้จอง ---
+    # --- ส่วนที่ 1 ---
     st.markdown('<div class="section-1-container"><div class="header-1">👤 ส่วนที่ 1: รายละเอียดผู้ขอใช้บริการ</div><div class="body-1">', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     with c1:
@@ -119,11 +117,14 @@ with tab1:
         purpose = st.text_input("วัตถุประสงค์")
     st.markdown('</div></div>', unsafe_allow_html=True)
 
-    # --- ส่วนที่ 2: รายละเอียดเครื่องมือ ---
+    # --- ส่วนที่ 2 ---
     st.markdown('<div class="section-2-container"><div class="header-2">🔬 ส่วนที่ 2: รายละเอียดเครื่องมือ และปฏิทินวันว่าง</div><div class="body-2">', unsafe_allow_html=True)
     col_t, col_i = st.columns([2, 1])
-    with col_t: tool_name = st.text_input("ชื่อเครื่องมือวิทยาศาสตร์")
-    with col_id := col_i: asset_id = st.text_input("รหัสครุภัณฑ์")
+    with col_t:
+        tool_name = st.text_input("ชื่อเครื่องมือวิทยาศาสตร์")
+    with col_i:
+        # แก้ไขจุดที่เกิด Error: แยกตัวแปรออกมาปกติ
+        asset_id = st.text_input("รหัสครุภัณฑ์")
     
     if tool_name and asset_id:
         q_busy = "SELECT start_date, end_date FROM bookings WHERE tool_name = ? AND asset_id = ? AND approval_status != 'ไม่นุมัติ'"
@@ -145,13 +146,13 @@ with tab1:
             check_q = "SELECT id FROM bookings WHERE tool_name = ? AND asset_id = ? AND approval_status != 'ไม่นุมัติ' AND (? <= end_date AND ? >= start_date)"
             res = pd.read_sql_query(check_q, db_conn, params=(tool_name, asset_id, str(end_date), str(start_date)))
             if not res.empty:
-                st.error("❌ ไม่สามารถจองได้: ช่วงวันที่เลือกมีการจองอยู่แล้ว")
+                st.error("❌ ช่วงวันที่เลือกมีการจองอยู่แล้ว")
             else:
                 cur = db_conn.cursor()
                 cur.execute("INSERT INTO bookings (name, status, phone, faculty, supervisor, purpose, start_date, end_date, tool_name, asset_id) VALUES (?,?,?,?,?,?,?,?,?,?)", 
                             (name, u_status, phone, faculty, supervisor, purpose, str(start_date), str(end_date), tool_name, asset_id))
                 db_conn.commit()
-                st.success("🎉 บันทึกคำขอสำเร็จ! ข้อมูลถูกส่งเข้าฐานข้อมูล วท.บ.เคมี แล้ว")
+                st.success("🎉 บันทึกคำขอสำเร็จ!")
                 st.balloons()
 
 with tab2:
@@ -179,4 +180,4 @@ with tab2:
                 db_conn.commit()
                 st.rerun()
     else:
-        st.info("ยังไม่มีข้อมูลในระบบ")
+        st.info("ยังไม่มีข้อมูล")
