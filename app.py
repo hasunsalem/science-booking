@@ -1,157 +1,150 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 
-# --- 1. CONFIG & ADVANCED UI DESIGN ---
-st.set_page_config(page_title="Chem Booking - วท.บ.เคมี", layout="wide")
+# --- 1. CONFIG & UI DESIGN ---
+st.set_page_config(page_title="Chem Booking - ปฏิทินอัจฉริยะ", layout="wide")
 
 st.markdown("""
 <style>
-    /* พื้นหลังหลัก */
     .stApp { background-color: #fcfdfe !important; }
+    .molecule-bg { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 0; pointer-events: none; opacity: 0.1; overflow: hidden; }
+    .molecule { position: absolute; font-family: 'Courier New', monospace; font-weight: 900; color: #1a365d; animation: floatWave 25s infinite alternate ease-in-out; }
+    @keyframes floatWave { 0% { transform: translate(0, 0) rotate(0deg); } 100% { transform: translate(100px, 50px) rotate(360deg); } }
     
-    /* ลายน้ำโมเลกุล Dynamic Watermark */
-    .molecule-bg {
-        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-        z-index: 0; pointer-events: none; overflow: hidden; opacity: 0.12;
-    }
-    .molecule {
-        position: absolute; font-family: 'Courier New', monospace; font-weight: 900;
-        color: #1a365d; animation: floatWave 25s infinite alternate ease-in-out;
-    }
-    @keyframes floatWave {
-        0% { transform: translate(0, 0) rotate(0deg) scale(1); }
-        50% { transform: translate(100px, 50px) rotate(180deg) scale(1.1); }
-        100% { transform: translate(-50px, 100px) rotate(360deg) scale(1); }
-    }
-
-    /* สไตล์กล่องส่วนที่ 1 (น้ำเงิน) */
-    .box-1-container { border-radius: 20px; overflow: hidden; margin-bottom: 35px; box-shadow: 0 10px 30px rgba(30,58,138,0.15); border: 1px solid #e2e8f0; }
-    .box-1-header { background: linear-gradient(90deg, #1e3a8a, #3b82f6); color: white; padding: 18px 25px; font-size: 1.25rem; font-weight: bold; }
-    .box-1-body { background: #f0f7ff; padding: 30px; border-top: 2px solid rgba(255,255,255,0.3); }
-
-    /* สไตล์กล่องส่วนที่ 2 (ม่วง) */
-    .box-2-container { border-radius: 20px; overflow: hidden; margin-bottom: 35px; box-shadow: 0 10px 30px rgba(88,28,135,0.15); border: 1px solid #e2e8f0; }
-    .box-2-header { background: linear-gradient(90deg, #581c87, #a855f7); color: white; padding: 18px 25px; font-size: 1.25rem; font-weight: bold; }
-    .box-2-body { background: #faf5ff; padding: 30px; border-top: 2px solid rgba(255,255,255,0.3); }
-
-    /* ปรับแต่งช่อง Input */
-    .stTextInput > div > div > input, .stSelectbox > div > div > div {
-        border-radius: 12px !important; border: 1px solid #cbd5e1 !important; background: white !important;
-    }
+    /* สไตล์กล่อง Integrated Box แบบที่คุณชอบ */
+    .section-container { border-radius: 20px; overflow: hidden; margin-bottom: 30px; box-shadow: 0 8px 25px rgba(0,0,0,0.08); }
+    .header-blue { background: #1e3a8a; color: white; padding: 15px 25px; font-weight: bold; }
+    .body-blue { background: #eff6ff; padding: 25px; }
+    .header-purple { background: #581c87; color: white; padding: 15px 25px; font-weight: bold; }
+    .body-purple { background: #f5f3ff; padding: 25px; }
     
-    .block-container { position: relative; z-index: 10; padding-top: 2rem; }
-    .main-title { font-weight: 800; color: #0f172a; text-align: center; margin-bottom: 5px; }
-    .sub-title { text-align: center; color: #475569; font-size: 1.1rem; margin-bottom: 40px; }
+    .block-container { position: relative; z-index: 10; }
+    .avail-info { background: #fff3cd; color: #856404; padding: 10px; border-radius: 10px; margin-bottom: 15px; border-left: 5px solid #ffeeba; }
 </style>
 
 <div class="molecule-bg">
     <div class="molecule" style="top:10%; left:8%; font-size:55px;">H₂O</div>
     <div class="molecule" style="top:45%; left:82%; font-size:75px; animation-delay: -5s;">C₆H₁₂O₆</div>
     <div class="molecule" style="top:75%; left:18%; font-size:60px; animation-delay: -10s;">NaCl</div>
-    <div class="molecule" style="top:25%; left:65%; font-size:50px; animation-delay: -15s;">NH₃</div>
-    <div class="molecule" style="top:85%; left:70%; font-size:45px; animation-delay: -2s;">CO₂</div>
 </div>
 """, unsafe_allow_html=True)
 
-# --- 2. DATABASE INITIALIZATION ---
+# --- 2. DATABASE SYSTEM ---
 def init_db():
-    conn = sqlite3.connect('chem_lab_booking.db', check_same_thread=False)
+    conn = sqlite3.connect('chem_lab_v9.db', check_same_thread=False)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS bookings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT, status TEXT, phone TEXT, faculty TEXT, supervisor TEXT,
-        purpose TEXT, location TEXT, start_date DATE, end_date DATE, 
-        tool_name TEXT, asset_id TEXT, state TEXT DEFAULT 'Active'
+        start_date DATE, end_date DATE, tool_name TEXT, asset_id TEXT, 
+        approval_status TEXT DEFAULT 'รออนุมัติ'
     )''')
     conn.commit()
     return conn
 db_conn = init_db()
 
-# --- 3. APP MAIN INTERFACE ---
-st.markdown("<h1 class='main-title'>ระบบขอใช้เครื่องมือวิทยาศาสตร์</h1>", unsafe_allow_html=True)
-st.markdown("<p class='sub-title'>หลักสูตร วท.บ. สาขาวิชาเคมี</p>", unsafe_allow_html=True)
+# ฟังก์ชันดึงช่วงที่ไม่ว่างของเครื่องมือ
+def get_unavailable_dates(asset_id):
+    query = "SELECT start_date, end_date FROM bookings WHERE asset_id = ? AND approval_status != 'ไม่นุมัติ'"
+    df_dates = pd.read_sql_query(query, db_conn, params=(asset_id,))
+    unavailable_ranges = []
+    for _, row in df_dates.iterrows():
+        unavailable_ranges.append(f"📅 {row['start_date']} ถึง {row['end_date']}")
+    return unavailable_ranges
 
-tab1, tab2 = st.tabs(["📝 แบบฟอร์มลงทะเบียนจอง", "📋 ตรวจสอบสถานะการจอง"])
+# ฟังก์ชันเช็คการทับซ้อน (Logic เดิมแต่เข้มงวดขึ้น)
+def is_date_conflict(asset_id, start, end):
+    q = "SELECT id FROM bookings WHERE asset_id = ? AND approval_status != 'ไม่นุมัติ' AND (? <= end_date AND ? >= start_date)"
+    res = pd.read_sql_query(q, db_conn, params=(asset_id, str(end), str(start)))
+    return not res.empty
+
+# --- 3. UI LAYOUT ---
+st.markdown("<h1 style='text-align: center;'>ระบบขอใช้เครื่องมือวิทยาศาสตร์</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #666;'>หลักสูตร วท.บ. สาขาวิชาเคมี</p>", unsafe_allow_html=True)
+
+tab1, tab2 = st.tabs(["📝 แบบฟอร์มการจอง", "📋 ตรวจสอบสถานะ"])
 
 with tab1:
-    if 'rows_count' not in st.session_state: st.session_state.rows_count = 1
+    # --- ส่วนที่ 2: รายละเอียดเครื่องมือ (เอาขึ้นก่อนเพื่อให้เช็ควันได้เลย) ---
+    st.markdown('<div class="section-container"><div class="header-purple">🔬 ส่วนที่ 2: รายละเอียดเครื่องมือ และ ตรวจสอบปฏิทินว่าง</div><div class="body-purple">', unsafe_allow_html=True)
+    
+    col_t1, col_t2 = st.columns([2, 1])
+    with col_t2:
+        asset_id_input = st.text_input("ระบุรหัสครุภัณฑ์เพื่อเช็ควันว่าง", placeholder="เช่น CHEM-001")
+    with col_t1:
+        tool_name_input = st.text_input("ชื่อเครื่องมือวิทยาศาสตร์")
 
-    # --- ส่วนที่ 1: รายละเอียดผู้จอง ---
-    st.markdown('<div class="box-1-container">', unsafe_allow_html=True)
-    st.markdown('<div class="box-1-header">👤 ส่วนที่ 1: รายละเอียดผู้ขอใช้บริการ และ วัตถุประสงค์</div>', unsafe_allow_html=True)
-    st.markdown('<div class="box-1-body">', unsafe_allow_html=True)
+    # บล็อกแสดงวันที่ไม่ว่าง
+    if asset_id_input:
+        busy_dates = get_unavailable_dates(asset_id_input)
+        if busy_dates:
+            st.markdown('<div class="avail-info"><b>⚠️ ช่วงเวลาที่ไม่สามารถเลือกได้:</b><br>' + '<br>'.join(busy_dates) + '</div>', unsafe_allow_html=True)
+        else:
+            st.success("✅ เครื่องมือนี้ว่างทุกช่วงเวลา สามารถเลือกวันได้ตามสะดวก")
+    
+    st.markdown('</div></div>', unsafe_allow_html=True)
+
+    # --- ส่วนที่ 1: รายละเอียดผู้จอง และ วันที่ ---
+    st.markdown('<div class="section-container"><div class="header-blue">👤 ส่วนที่ 1: รายละเอียดผู้ขอใช้ และ วันที่ต้องการจอง</div><div class="body-blue">', unsafe_allow_html=True)
     
     c1, c2 = st.columns(2)
     with c1:
-        name = st.text_input("ชื่อ - นามสกุล", placeholder="ตัวอย่าง: นายสมชาย เคมีไทย")
-        u_status = st.selectbox("สถานะผู้ขอใช้", ["อาจารย์", "เจ้าหน้าที่", "นักศึกษา"])
-        phone = st.text_input("เบอร์โทรศัพท์ติดต่อ")
+        name = st.text_input("ชื่อ - นามสกุล")
+        u_status = st.selectbox("สถานะ", ["นักศึกษา", "อาจารย์", "เจ้าหน้าที่"])
+        phone = st.text_input("เบอร์โทรศัพท์")
     with c2:
-        faculty = st.text_input("สังกัด / คณะ / สาขาวิชา")
-        supervisor = st.text_input("อาจารย์ผู้ควบคุม (Advisor)")
-        location = st.text_input("สถานที่นำเครื่องมือไปใช้")
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    purpose = st.radio("วัตถุประสงค์การใช้งาน", ["งานวิจัย", "การเรียนการสอน (Lab)", "อื่นๆ"], horizontal=True)
-    
+        faculty = st.text_input("คณะ/สาขาวิชา", value="วท.บ.เคมี")
+        supervisor = st.text_input("อาจารย์ผู้ควบคุม")
+        
+    st.divider()
     d1, d2 = st.columns(2)
     with d1:
-        start_date = st.date_input("วันที่เริ่มต้นการใช้", min_value=datetime.today())
+        start_date = st.date_input("เลือกวันที่เริ่มใช้", min_value=datetime.today())
     with d2:
-        end_date = st.date_input("วันที่ส่งคืน/สิ้นสุด", min_value=start_date)
-    st.markdown('</div></div>', unsafe_allow_html=True)
-
-    # --- ส่วนที่ 2: รายละเอียดเครื่องมือ ---
-    st.markdown('<div class="box-2-container">', unsafe_allow_html=True)
-    st.markdown('<div class="box-2-header">🔬 ส่วนที่ 2: รายละเอียดเครื่องมือวิทยาศาสตร์ และ รหัสครุภัณฑ์</div>', unsafe_allow_html=True)
-    st.markdown('<div class="box-2-body">', unsafe_allow_html=True)
-    
-    items_to_book = []
-    for i in range(st.session_state.rows_count):
-        st.markdown(f"**🔹 รายการเครื่องมือที่ {i+1}**")
-        it1, it2 = st.columns([3, 1])
-        with it1:
-            t_n = st.text_input(f"ชื่อเครื่องมือ (Chemical Tool Name)", key=f"t_n_{i}")
-        with it2:
-            a_i = st.text_input(f"รหัสครุภัณฑ์", key=f"a_i_{i}")
-        items_to_book.append({"name": t_n, "id": a_i})
-    
-    if st.button("➕ เพิ่มรายการเครื่องมืออื่น ๆ"):
-        st.session_state.rows_count += 1
-        st.rerun()
+        end_date = st.date_input("เลือกวันที่คืน", min_value=start_date)
         
     st.markdown('</div></div>', unsafe_allow_html=True)
 
-    if st.button("🚀 ยืนยันข้อมูลการจอง", use_container_width=True, type="primary"):
-        if not name or not items_to_book[0]['id']:
-            st.error("⚠️ กรุณากรอกข้อมูลผู้จองและรหัสครุภัณฑ์อย่างน้อย 1 รายการ")
+    # ปุ่มส่งข้อมูล
+    if st.button("🚀 ตรวจสอบและยืนยันการจอง", use_container_width=True, type="primary"):
+        if not name or not asset_id_input:
+            st.error("⚠️ กรุณากรอกข้อมูลให้ครบถ้วน")
+        elif is_date_conflict(asset_id_input, start_date, end_date):
+            st.error(f"❌ ไม่สามารถจองได้: ช่วงวันที่คุณเลือกมีการจองอยู่แล้ว โปรดตรวจสอบปฏิทินอีกครั้ง")
         else:
-            success = 0
-            for item in items_to_book:
-                if item['id']:
-                    q = "SELECT name FROM bookings WHERE asset_id = ? AND state = 'Active' AND (? <= end_date AND ? >= start_date)"
-                    overlap = pd.read_sql_query(q, db_conn, params=(item['id'], str(end_date), str(start_date)))
-                    
-                    if not overlap.empty:
-                        st.error(f"❌ รายการ '{item['name']}' ถูกจองแล้วโดยคุณ {overlap.iloc[0]['name']}")
-                    else:
-                        cursor = db_conn.cursor()
-                        cursor.execute('''INSERT INTO bookings 
-                            (name, status, phone, faculty, supervisor, purpose, location, start_date, end_date, tool_name, asset_id)
-                            VALUES (?,?,?,?,?,?,?,?,?,?,?)''', 
-                            (name, u_status, phone, faculty, supervisor, purpose, location, str(start_date), str(end_date), item['name'], item['id']))
-                        db_conn.commit()
-                        success += 1
-            if success > 0:
-                st.success(f"🎉 บันทึกสำเร็จ! ข้อมูลถูกส่งเข้าระบบ วท.บ.เคมี เรียบร้อยแล้ว")
-                st.balloons()
+            cur = db_conn.cursor()
+            cur.execute("INSERT INTO bookings (name, status, phone, faculty, supervisor, start_date, end_date, tool_name, asset_id) VALUES (?,?,?,?,?,?,?,?,?)", 
+                        (name, u_status, phone, faculty, supervisor, str(start_date), str(end_date), tool_name_input, asset_id_input))
+            db_conn.commit()
+            st.success("🎉 บันทึกคำขอจองเรียบร้อย! โปรดรอเจ้าหน้าที่พิจารณาอนุมัติ")
+            st.balloons()
 
 with tab2:
-    st.markdown("### 📊 ตารางแสดงประวัติการใช้งาน (วท.บ.เคมี)")
-    all_data = pd.read_sql_query("SELECT id, name, tool_name, asset_id, start_date, end_date, state FROM bookings ORDER BY id DESC", db_conn)
-    if not all_data.empty:
-        st.dataframe(all_data, use_container_width=True, hide_index=True)
+    # --- ส่วนจัดการสถานะ (เหมือนเดิมแต่เพิ่มการกรอง) ---
+    st.markdown("### 📊 ตารางสถานะการจอง วท.บ.เคมี")
+    
+    is_admin = st.sidebar.checkbox("โหมดเจ้าหน้าที่")
+    df = pd.read_sql_query("SELECT * FROM bookings ORDER BY id DESC", db_conn)
+    
+    if not df.empty:
+        st.dataframe(df, use_container_width=True, hide_index=True, column_config={
+            "approval_status": st.column_config.BadgeColumn("สถานะ", 
+                map={"รออนุมัติ": "🟡 รออนุมัติ", "อนุมัติแล้ว": "🟢 อนุมัติแล้ว", "ไม่นุมัติ": "🔴 ไม่นุมัติ"})
+        })
+        
+        if is_admin:
+            st.divider()
+            target_id = st.number_input("จัดการ ID รายการ:", min_value=1, step=1)
+            b1, b2 = st.columns(2)
+            if b1.button("✅ อนุมัติ"):
+                db_conn.cursor().execute("UPDATE bookings SET approval_status = 'อนุมัติแล้ว' WHERE id = ?", (target_id,))
+                db_conn.commit()
+                st.rerun()
+            if b2.button("❌ ไม่นุมัติ"):
+                db_conn.cursor().execute("UPDATE bookings SET approval_status = 'ไม่นุมัติ' WHERE id = ?", (target_id,))
+                db_conn.commit()
+                st.rerun()
     else:
-        st.info("ยังไม่มีข้อมูลการจองในฐานข้อมูลของสาขา")
+        st.info("ยังไม่มีข้อมูลการจอง")
