@@ -21,7 +21,6 @@ st.markdown("""
     .body-2 { background: #f5f3ff; padding: 30px; }
     .block-container { position: relative; z-index: 10; }
     
-    /* สไตล์แถบแจ้งเตือนแบบเฉพาะเจาะจง */
     .busy-box { background: #fff3cd; color: #856404; padding: 15px; border-radius: 12px; margin-top: 10px; border-left: 6px solid #ffc107; font-size: 0.95rem; }
 </style>
 <div class="molecule-bg">
@@ -33,22 +32,31 @@ st.markdown("""
 
 # --- 2. DATABASE SYSTEM ---
 def init_db():
-    conn = sqlite3.connect('chem_lab_final_v1.db', check_same_thread=False)
+    # เปลี่ยนชื่อไฟล์เป็น v_final เพื่อบังคับสร้างตารางใหม่ที่ถูกต้อง
+    conn = sqlite3.connect('chem_lab_v_final.db', check_same_thread=False)
     c = conn.cursor()
+    # สร้างตารางให้ครบทุกคอลัมน์ตามคำสั่ง INSERT
     c.execute('''CREATE TABLE IF NOT EXISTS bookings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT, status TEXT, phone TEXT, faculty TEXT, supervisor TEXT,
-        start_date DATE, end_date DATE, tool_name TEXT, asset_id TEXT, 
+        name TEXT, 
+        status TEXT, 
+        phone TEXT, 
+        faculty TEXT, 
+        supervisor TEXT,
+        purpose TEXT, 
+        start_date DATE, 
+        end_date DATE, 
+        tool_name TEXT, 
+        asset_id TEXT, 
         approval_status TEXT DEFAULT 'รออนุมัติ'
     )''')
     conn.commit()
     return conn
+
 db_conn = init_db()
 
-# ฟังก์ชันดึงวันที่ไม่ว่าง (เงื่อนไข: ต้องตรงทั้งชื่อเครื่องและรหัสครุภัณฑ์)
 def get_specific_busy_dates(t_name, a_id):
-    if not t_name or not a_id:
-        return []
+    if not t_name or not a_id: return []
     query = "SELECT start_date, end_date FROM bookings WHERE tool_name = ? AND asset_id = ? AND approval_status != 'ไม่นุมัติ'"
     df = pd.read_sql_query(query, db_conn, params=(t_name, a_id))
     return [f"📅 {row['start_date']} ถึง {row['end_date']}" for _, row in df.iterrows()]
@@ -71,31 +79,29 @@ st.markdown("<p style='text-align: center; color: #475569; margin-bottom: 40px;'
 tab1, tab2 = st.tabs(["✍️ ลงทะเบียนจอง", "🔍 ตรวจสอบสถานะ"])
 
 with tab1:
-    # --- ส่วนที่ 1: ข้อมูลผู้ขอใช้บริการ ---
+    # --- ส่วนที่ 1 ---
     st.markdown('<div class="section-1-container"><div class="header-1">👤 ส่วนที่ 1: รายละเอียดผู้ขอใช้บริการ</div><div class="body-1">', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     with c1:
         name = st.text_input("ชื่อ - นามสกุล")
         u_status = st.selectbox("สถานะ", ["นักศึกษา", "อาจารย์", "เจ้าหน้าที่"])
-        phone = st.text_input("เบอร์โทรศัพท์")
+        phone = st.text_input("เบอร์โทรศัพท์ติดต่อ")
     with c2:
         faculty = st.text_input("คณะ/สังกัด", value="วท.บ.เคมี")
         supervisor = st.text_input("อาจารย์ผู้ควบคุม")
-        purpose = st.text_input("วัตถุประสงค์")
+        purpose = st.text_input("วัตถุประสงค์การใช้งาน")
     st.markdown('</div></div>', unsafe_allow_html=True)
 
-    # --- ส่วนที่ 2: รายละเอียดเครื่องมือ ---
+    # --- ส่วนที่ 2 ---
     st.markdown('<div class="section-2-container"><div class="header-2">🔬 ส่วนที่ 2: รายละเอียดเครื่องมือ และปฏิทินวันว่าง</div><div class="body-2">', unsafe_allow_html=True)
     col_tool, col_id = st.columns([2, 1])
-    with col_tool: tool_name = st.text_input("ชื่อเครื่องมือวิทยาศาสตร์ (ต้องตรงกับในระบบเพื่อเช็ควันว่าง)")
+    with col_tool: tool_name = st.text_input("ชื่อเครื่องมือวิทยาศาสตร์")
     with col_id: asset_id = st.text_input("รหัสครุภัณฑ์")
     
-    # แจ้งเตือนเฉพาะเมื่อ "ชื่อเครื่อง" และ "รหัสครุภัณฑ์" ตรงกับที่มีในฐานข้อมูลเท่านั้น
     if tool_name and asset_id:
         busy_list = get_specific_busy_dates(tool_name, asset_id)
         if busy_list:
-            st.markdown('<div class="busy-box"><b>⚠️ พบประวัติการจองของเครื่องมือนี้ (ไม่สามารถจองซ้ำวันที่เหล่านี้ได้):</b><br>' + '<br>'.join(busy_list) + '</div>', unsafe_allow_html=True)
-        # ถ้าไม่พบประวัติ หรือกรอกชื่อ/รหัสใหม่ จะไม่มีแถบเหลืองขึ้น (เงียบไปเลย)
+            st.markdown('<div class="busy-box"><b>⚠️ พบประวัติการจองของเครื่องมือนี้:</b><br>' + '<br>'.join(busy_list) + '</div>', unsafe_allow_html=True)
 
     st.divider()
     col_d1, col_d2 = st.columns(2)
@@ -107,13 +113,17 @@ with tab1:
         if not name or not tool_name or not asset_id:
             st.error("⚠️ กรุณากรอกข้อมูลให้ครบถ้วน")
         elif is_conflict(tool_name, asset_id, start_date, end_date):
-            st.error("❌ ช่วงวันที่เลือกมีการจองเครื่องมือนี้อยู่แล้ว")
+            st.error("❌ ไม่สามารถจองได้: ช่วงวันที่เลือกมีการจองเครื่องมือนี้อยู่แล้ว")
         else:
             cur = db_conn.cursor()
-            cur.execute("INSERT INTO bookings (name, status, phone, faculty, supervisor, purpose, start_date, end_date, tool_name, asset_id) VALUES (?,?,?,?,?,?,?,?,?,?)", 
-                        (name, u_status, phone, faculty, supervisor, purpose, str(start_date), str(end_date), tool_name, asset_id))
+            # คำสั่ง INSERT ที่ต้องมี 10 column ตรงกับ VALUES
+            cur.execute("""INSERT INTO bookings 
+                (name, status, phone, faculty, supervisor, purpose, start_date, end_date, tool_name, asset_id) 
+                VALUES (?,?,?,?,?,?,?,?,?,?)""", 
+                (name, u_status, phone, faculty, supervisor, purpose, str(start_date), str(end_date), tool_name, asset_id))
             db_conn.commit()
             st.success("🎉 บันทึกคำขอสำเร็จ!")
+            st.balloons()
 
 with tab2:
     st.markdown("### 📊 รายการตรวจสอบสถานะการจอง")
